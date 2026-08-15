@@ -27,9 +27,12 @@ jobs:
           from pathlib import Path
           p=Path('_site/index.html')
           s=p.read_text(encoding='utf-8')
-          tag='<script src="pathway-guide.js"></script>'
-          if tag not in s:
-              s=s.replace('</body>',tag+'\n</body>')
+          css='<link rel="stylesheet" href="pathway-upgrade.css">'
+          js='<script src="pathway-upgrade.js"></script>'
+          if css not in s:
+              s=s.replace('</head>',css+'\n</head>')
+          if js not in s:
+              s=s.replace('</body>',js+'\n</body>')
           p.write_text(s,encoding='utf-8')
           PY
       - name: Setup Pages
