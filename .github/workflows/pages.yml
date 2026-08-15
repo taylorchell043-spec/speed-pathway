@@ -24,17 +24,18 @@ jobs:
           rm -rf _site
           mkdir _site
           cp index.html _site/index.html
-          cp pathway-upgrade.js pathway-upgrade.css _site/
+          cp pathway-upgrade.js pathway-upgrade.css recruiting-playbook.js _site/
           python3 - <<'PY'
           from pathlib import Path
           p=Path('_site/index.html')
           s=p.read_text(encoding='utf-8')
           css='<link rel="stylesheet" href="pathway-upgrade.css">'
-          js='<script src="pathway-upgrade.js"></script>'
+          scripts=['<script src="pathway-upgrade.js"></script>','<script src="recruiting-playbook.js"></script>']
           if css not in s:
               s=s.replace('</head>',css+'\n</head>')
-          if js not in s:
-              s=s.replace('</body>',js+'\n</body>')
+          for js in scripts:
+              if js not in s:
+                  s=s.replace('</body>',js+'\n</body>')
           p.write_text(s,encoding='utf-8')
           PY
       - name: Setup Pages
