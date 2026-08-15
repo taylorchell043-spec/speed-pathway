@@ -24,14 +24,14 @@ jobs:
           rm -rf _site
           mkdir _site
           cp index.html _site/index.html
-          cp pathway-upgrade.js pathway-upgrade.css recruiting-playbook.js _site/
+          cp pathway-upgrade.js pathway-upgrade.css recruiting-playbook.js admin-accounts.js _site/
           python3 - <<'PY'
           from pathlib import Path
           p=Path('_site/index.html')
           s=p.read_text(encoding='utf-8')
           cache='<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0">'
-          css='<link rel="stylesheet" href="pathway-upgrade.css?v=24">'
-          scripts=['<script src="pathway-upgrade.js?v=24"></script>','<script src="recruiting-playbook.js?v=24"></script>']
+          css='<link rel="stylesheet" href="pathway-upgrade.css?v=25">'
+          scripts=['<script src="pathway-upgrade.js?v=25"></script>','<script src="recruiting-playbook.js?v=25"></script>','<script src="admin-accounts.js?v=25"></script>']
           if cache not in s:
               s=s.replace('</head>',cache+'\n'+css+'\n</head>')
           else:
