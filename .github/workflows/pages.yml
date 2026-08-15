@@ -19,7 +19,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Build athlete guidance layer
+      - name: Build Speed Pathway
         run: |
           rm -rf _site
           mkdir _site
@@ -29,13 +29,15 @@ jobs:
           from pathlib import Path
           p=Path('_site/index.html')
           s=p.read_text(encoding='utf-8')
-          css='<link rel="stylesheet" href="pathway-upgrade.css">'
-          scripts=['<script src="pathway-upgrade.js"></script>','<script src="recruiting-playbook.js"></script>']
-          if css not in s:
-              s=s.replace('</head>',css+'\n</head>')
+          cache='<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0">'
+          css='<link rel="stylesheet" href="pathway-upgrade.css?v=24">'
+          scripts=['<script src="pathway-upgrade.js?v=24"></script>','<script src="recruiting-playbook.js?v=24"></script>']
+          if cache not in s:
+              s=s.replace('</head>',cache+'\n'+css+'\n</head>')
+          else:
+              if css not in s:s=s.replace('</head>',css+'\n</head>')
           for js in scripts:
-              if js not in s:
-                  s=s.replace('</body>',js+'\n</body>')
+              if js not in s:s=s.replace('</body>',js+'\n</body>')
           p.write_text(s,encoding='utf-8')
           PY
       - name: Setup Pages
