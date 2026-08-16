@@ -1,0 +1,36 @@
+name: Speed Pathway Auth E2E Test
+on:
+  push:
+    paths:
+      - '.github/workflows/e2e-auth-test.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  signup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create pending test registration
+        env:
+          TEST_EMAIL: taylorchell043+speedpathway-e2e-20260815-2255@gmail.com
+          TEST_PASSWORD: SpdE2E!20260815x91
+          SUPA_URL: https://rcisvivlhpdwwikoakmt.supabase.co
+          SUPA_KEY: sb_publishable_WF7qqXdDuSld2wu1PQYJbQ_3h5avNvz
+          REDIRECT: https://taylorchell043-spec.github.io/speed-pathway/
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/signup.json -w '%{http_code}' \
+            -X POST "$SUPA_URL/auth/v1/signup?redirect_to=$(python3 -c 'import urllib.parse,os; print(urllib.parse.quote(os.environ["REDIRECT"],safe=""))')" \
+            -H "apikey: $SUPA_KEY" \
+            -H "Authorization: Bearer $SUPA_KEY" \
+            -H 'Content-Type: application/json' \
+            --data "{\"email\":\"$TEST_EMAIL\",\"password\":\"$TEST_PASSWORD\",\"data\":{\"display_name\":\"Speed Pathway E2E Test\"}}")
+          echo "signup_http=$code"
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/signup.json'))
+          print('user_created=' + str(bool(d.get('id') or d.get('user',{}).get('id'))).lower())
+          print('email=' + str(d.get('email') or d.get('user',{}).get('email') or ''))
+          print('error=' + str(d.get('msg') or d.get('message') or d.get('error_description') or ''))
+          PY
+          test "$code" = "200"
