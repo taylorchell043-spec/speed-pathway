@@ -3,35 +3,70 @@ on:
   push:
     paths:
       - '.github/workflows/e2e-auth-test.yml'
-  workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  signup:
+  confirm:
     runs-on: ubuntu-latest
     steps:
-      - name: Create pending test registration
+      - name: Test signup, confirmation redirect, and pending profile
         env:
-          TEST_EMAIL: taylorchell043+speedpathway-e2e-20260815-2255@gmail.com
-          TEST_PASSWORD: SpdE2E!20260815x91
           SUPA_URL: https://rcisvivlhpdwwikoakmt.supabase.co
           SUPA_KEY: sb_publishable_WF7qqXdDuSld2wu1PQYJbQ_3h5avNvz
           REDIRECT: https://taylorchell043-spec.github.io/speed-pathway/
+          TEST_PASSWORD: SpdE2E-Confirm-2026!
         run: |
-          set -euo pipefail
-          code=$(curl -sS -o /tmp/signup.json -w '%{http_code}' \
-            -X POST "$SUPA_URL/auth/v1/signup?redirect_to=$(python3 -c 'import urllib.parse,os; print(urllib.parse.quote(os.environ["REDIRECT"],safe=""))')" \
-            -H "apikey: $SUPA_KEY" \
-            -H "Authorization: Bearer $SUPA_KEY" \
-            -H 'Content-Type: application/json' \
-            --data "{\"email\":\"$TEST_EMAIL\",\"password\":\"$TEST_PASSWORD\",\"data\":{\"display_name\":\"Speed Pathway E2E Test\"}}")
-          echo "signup_http=$code"
           python3 - <<'PY'
-          import json
-          d=json.load(open('/tmp/signup.json'))
-          print('user_created=' + str(bool(d.get('id') or d.get('user',{}).get('id'))).lower())
-          print('email=' + str(d.get('email') or d.get('user',{}).get('email') or ''))
-          print('error=' + str(d.get('msg') or d.get('message') or d.get('error_description') or ''))
+          import os,time,re,html,requests,sys
+          S=os.environ['SUPA_URL']; K=os.environ['SUPA_KEY']; R=os.environ['REDIRECT']; P=os.environ['TEST_PASSWORD']
+          H={'apikey':K,'Authorization':'Bearer '+K,'Content-Type':'application/json'}
+          run=os.environ['GITHUB_RUN_ID']
+          domains=requests.get('https://api.mail.tm/domains',timeout=20).json()['hydra:member']
+          domain=domains[0]['domain']
+          def mailbox(kind):
+              email=f'speedpathway-{kind}-{run}@{domain}'
+              r=requests.post('https://api.mail.tm/accounts',json={'address':email,'password':P},timeout=20); r.raise_for_status()
+              t=requests.post('https://api.mail.tm/token',json={'address':email,'password':P},timeout=20); t.raise_for_status()
+              return email,t.json()['token']
+          def signup(email,kind):
+              r=requests.post(S+'/auth/v1/signup',params={'redirect_to':R},headers=H,json={'email':email,'password':P,'data':{'display_name':f'Speed Pathway E2E {kind} {run}','e2e_run':run,'e2e_kind':kind}},timeout=25)
+              print(kind+'_signup_http='+str(r.status_code)); r.raise_for_status(); assert r.json().get('id')
+              return r.json()['id']
+          def confirmation(token):
+              mh={'Authorization':'Bearer '+token}
+              for _ in range(30):
+                  msgs=requests.get('https://api.mail.tm/messages',headers=mh,timeout=15).json().get('hydra:member',[])
+                  if msgs:
+                      m=requests.get('https://api.mail.tm/messages/'+msgs[0]['id'],headers=mh,timeout=15).json()
+                      blob=(m.get('html') or [''])[0] if isinstance(m.get('html'),list) else (m.get('html') or '')
+                      blob+=' '+(m.get('text') or '')
+                      blob=html.unescape(blob)
+                      urls=re.findall(r'https?://[^\s"<>]+',blob)
+                      for u in urls:
+                          if '/auth/v1/verify' in u:
+                              return u.replace('&amp;','&')
+                  time.sleep(2)
+              raise RuntimeError('confirmation email not received')
+          def confirm_and_login(email,token,kind):
+              u=confirmation(token)
+              rr=requests.get(u,allow_redirects=True,timeout=30)
+              print(kind+'_confirm_final='+rr.url)
+              print(kind+'_confirm_http='+str(rr.status_code))
+              assert rr.url.startswith(R), rr.url
+              assert rr.status_code==200
+              lr=requests.post(S+'/auth/v1/token?grant_type=password',headers=H,json={'email':email,'password':P},timeout=25)
+              print(kind+'_login_http='+str(lr.status_code)); lr.raise_for_status(); return lr.json()['access_token']
+          ue,ut=mailbox('user'); ae,at=mailbox('admin')
+          uid=signup(ue,'user'); aid=signup(ae,'admin')
+          userjwt=confirm_and_login(ue,ut,'user'); adminjwt=confirm_and_login(ae,at,'admin')
+          def profile(uid,jwt):
+              h={'apikey':K,'Authorization':'Bearer '+jwt}
+              r=requests.get(S+'/rest/v1/profiles',headers=h,params={'id':'eq.'+uid,'select':'id,display_name,role,approved'},timeout=20)
+              print('profile_http='+str(r.status_code)); r.raise_for_status(); return r.json()
+          up=profile(uid,userjwt); ap=profile(aid,adminjwt)
+          print('user_email='+ue); print('admin_email='+ae); print('user_id='+uid); print('admin_id='+aid)
+          print('user_profile='+str(up)); print('admin_profile='+str(ap))
+          assert up and up[0]['role']=='pending' and up[0]['approved'] is False
+          assert ap and ap[0]['role']=='pending' and ap[0]['approved'] is False
+          print('PHASE1_OK=true')
           PY
-          test "$code" = "200"
-# trigger 2026-08-15T22:55:30-05:00
