@@ -5,31 +5,16 @@ on:
       - '.github/workflows/e2e-auth-probe.yml'
   workflow_dispatch:
 jobs:
-  signup:
+  verify:
     runs-on: ubuntu-latest
     steps:
-      - name: Create test registration through public Supabase Auth API
+      - name: Verify signup token and follow redirect
         shell: bash
         run: |
           set -euo pipefail
-          EMAIL='taylorchell043+speed-e2e-8170756@gmail.com'
-          PASSWORD='SpeedE2E!8170756X'
-          URL='https://rcisvivlhpdwwikoakmt.supabase.co/auth/v1/signup?redirect_to=https%3A%2F%2Ftaylorchell043-spec.github.io%2Fspeed-pathway%2F'
+          TOKEN='f663d2331c613e85315b822acda8503d5827a68a0b67cd6a058c83d8'
           KEY='sb_publishable_WF7qqXdDuSld2wu1PQYJbQ_3h5avNvz'
-          HTTP=000
-          for attempt in 1 2 3; do
-            HTTP=$(curl -sS -o /tmp/signup.json -w '%{http_code}' -X POST "$URL" -H "apikey: $KEY" -H 'Content-Type: application/json' --data "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\",\"data\":{\"display_name\":\"Speed Pathway E2E Test\"}}")
-            echo "signup_attempt=$attempt signup_http=$HTTP"
-            if [ "$HTTP" = "200" ] || [ "$HTTP" = "201" ]; then break; fi
-            if [ "$HTTP" = "429" ]; then sleep 50; else break; fi
-          done
-          python3 - <<'PY'
-          import json
-          d=json.load(open('/tmp/signup.json'))
-          print('signup_user_id='+str((d.get('user') or {}).get('id') or d.get('id') or ''))
-          print('signup_email='+str((d.get('user') or {}).get('email') or d.get('email') or ''))
-          print('signup_has_session='+str(bool(d.get('session') or d.get('access_token'))).lower())
-          if d.get('error') or d.get('error_description') or d.get('msg'):
-              print('signup_error='+str(d.get('error_description') or d.get('msg') or d.get('error')))
-          PY
-          test "$HTTP" = "200" || test "$HTTP" = "201"
+          URL="https://rcisvivlhpdwwikoakmt.supabase.co/auth/v1/verify?token=$TOKEN&type=signup&redirect_to=https%3A%2F%2Ftaylorchell043-spec.github.io%2Fspeed-pathway%2F"
+          curl -sS -L -o /tmp/verify-body -D /tmp/verify-headers -w 'verify_http=%{http_code}\nverify_final_url=%{url_effective}\n' -H "apikey: $KEY" "$URL"
+          echo 'redirect_chain:'
+          grep -iE '^(HTTP/|location:)' /tmp/verify-headers || true
