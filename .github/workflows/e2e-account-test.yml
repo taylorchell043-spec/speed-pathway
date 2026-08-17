@@ -20,7 +20,7 @@ jobs:
           npx playwright install chromium --with-deps >/dev/null 2>&1
       - name: Run production account E2E
         run: |
-          cat > /tmp/e2e.mjs <<'NODE'
+          cat > e2e.mjs <<'NODE'
           import { chromium } from 'playwright';
           import crypto from 'crypto';
 
@@ -114,7 +114,6 @@ jobs:
             log(`ADMIN_PENDING ${admin.address}`);
             log('WAITING_FOR_TEST_ADMIN_ELEVATION');
 
-            // External verifier promotes this disposable account in Supabase. Keep polling the live app.
             let adminReady=false;
             for(let i=0;i<80;i++){
               await page.reload({waitUntil:'networkidle'});
@@ -165,4 +164,4 @@ jobs:
             await browser.close();
           }
           NODE
-          node /tmp/e2e.mjs
+          node e2e.mjs
