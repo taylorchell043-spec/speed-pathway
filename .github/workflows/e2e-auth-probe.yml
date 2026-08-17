@@ -16,11 +16,7 @@ jobs:
           PASSWORD='SpeedE2E!8170756X'
           URL='https://rcisvivlhpdwwikoakmt.supabase.co/auth/v1/signup?redirect_to=https%3A%2F%2Ftaylorchell043-spec.github.io%2Fspeed-pathway%2F'
           KEY='sb_publishable_WF7qqXdDuSld2wu1PQYJbQ_3h5avNvz'
-          HTTP=$(curl -sS -o /tmp/signup.json -w '%{http_code}' \
-            -X POST "$URL" \
-            -H "apikey: $KEY" \
-            -H 'Content-Type: application/json' \
-            --data "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\",\"data\":{\"display_name\":\"Speed Pathway E2E Test\"}}")
+          HTTP=$(curl -sS -o /tmp/signup.json -w '%{http_code}' -X POST "$URL" -H "apikey: $KEY" -H 'Content-Type: application/json' --data "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\",\"data\":{\"display_name\":\"Speed Pathway E2E Test\"}}")
           echo "signup_http=$HTTP"
           python3 - <<'PY'
           import json
@@ -32,3 +28,5 @@ jobs:
               print('signup_error='+str(d.get('error_description') or d.get('msg') or d.get('error')))
           PY
           test "$HTTP" = "200" || test "$HTTP" = "201"
+      - name: Marker
+        run: echo probe-triggered
