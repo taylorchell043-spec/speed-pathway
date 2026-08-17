@@ -1,0 +1,34 @@
+name: Speed Pathway Auth E2E Probe
+on:
+  push:
+    paths:
+      - '.github/workflows/e2e-auth-probe.yml'
+  workflow_dispatch:
+jobs:
+  signup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create test registration through public Supabase Auth API
+        shell: bash
+        run: |
+          set -euo pipefail
+          EMAIL='taylorchell043+speed-e2e-8170756@gmail.com'
+          PASSWORD='SpeedE2E!8170756X'
+          URL='https://rcisvivlhpdwwikoakmt.supabase.co/auth/v1/signup?redirect_to=https%3A%2F%2Ftaylorchell043-spec.github.io%2Fspeed-pathway%2F'
+          KEY='sb_publishable_WF7qqXdDuSld2wu1PQYJbQ_3h5avNvz'
+          HTTP=$(curl -sS -o /tmp/signup.json -w '%{http_code}' \
+            -X POST "$URL" \
+            -H "apikey: $KEY" \
+            -H 'Content-Type: application/json' \
+            --data "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\",\"data\":{\"display_name\":\"Speed Pathway E2E Test\"}}")
+          echo "signup_http=$HTTP"
+          python3 - <<'PY'
+          import json
+          d=json.load(open('/tmp/signup.json'))
+          print('signup_user_id='+str((d.get('user') or {}).get('id') or d.get('id') or ''))
+          print('signup_email='+str((d.get('user') or {}).get('email') or d.get('email') or ''))
+          print('signup_has_session='+str(bool(d.get('session') or d.get('access_token'))).lower())
+          if d.get('error') or d.get('error_description') or d.get('msg'):
+              print('signup_error='+str(d.get('error_description') or d.get('msg') or d.get('error')))
+          PY
+          test "$HTTP" = "200" || test "$HTTP" = "201"
