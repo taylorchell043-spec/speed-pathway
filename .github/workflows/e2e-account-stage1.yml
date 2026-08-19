@@ -1,0 +1,73 @@
+name: Temporary Speed Pathway Account E2E Stage 1
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  verify-signup-confirm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify signup, confirmation redirect, pending profile, and sign-in
+        env:
+          SUPA_URL: https://rcisvivlhpdwwikoakmt.supabase.co
+          SUPA_KEY: sb_publishable_WF7qqXdDuSld2wu1PQYJbQ_3h5avNvz
+          PUBLIC_URL: https://taylorchell043-spec.github.io/speed-pathway/
+        run: |
+          python3 - <<'PY'
+          import requests,re,time,json,random,string,html,os,sys
+          S=os.environ['SUPA_URL']; K=os.environ['SUPA_KEY']; PUB=os.environ['PUBLIC_URL']; PW='E2ePathway!2026x'
+          def disposable(tag):
+              domains=requests.get('https://api.mail.tm/domains',timeout=20).json().get('hydra:member',[])
+              if not domains: raise RuntimeError('mail.tm returned no domains')
+              domain=domains[0]['domain']; local='speedpath-'+tag+'-'+''.join(random.choice(string.ascii_lowercase+string.digits) for _ in range(10))
+              addr=f'{local}@{domain}'
+              r=requests.post('https://api.mail.tm/accounts',json={'address':addr,'password':PW},timeout=20); r.raise_for_status()
+              t=requests.post('https://api.mail.tm/token',json={'address':addr,'password':PW},timeout=20); t.raise_for_status()
+              return addr,t.json()['token']
+          def confirm_from_mail(addr,mtok):
+              h={'Authorization':'Bearer '+mtok}; msg=None
+              for _ in range(60):
+                  r=requests.get('https://api.mail.tm/messages',headers=h,timeout=20); r.raise_for_status()
+                  arr=r.json().get('hydra:member',[])
+                  if arr:
+                      for m in arr:
+                          if 'confirm' in (m.get('subject','').lower()) or 'supabase' in (m.get('from',{}).get('address','').lower()): msg=m; break
+                      msg=msg or arr[0]; break
+                  time.sleep(3)
+              if not msg: raise RuntimeError(f'No confirmation email received for {addr}')
+              d=requests.get('https://api.mail.tm/messages/'+msg['id'],headers=h,timeout=20); d.raise_for_status(); j=d.json()
+              body=(j.get('text') or '')+' '+str(j.get('html') or '')
+              body=html.unescape(body).replace('\\/','/')
+              urls=re.findall(r'https?://[^\s"\'<>]+',body)
+              link=next((u.rstrip(').,') for u in urls if '/auth/v1/verify' in u),None)
+              if not link: raise RuntimeError('Confirmation link not found in email')
+              rr=requests.get(link,allow_redirects=True,timeout=30)
+              final=rr.url
+              if not final.startswith(PUB): raise RuntimeError('Confirmation final URL was '+final)
+              if rr.status_code>=400: raise RuntimeError(f'Public site returned HTTP {rr.status_code} after confirmation')
+              return final
+          def signup(name,tag):
+              addr,mtok=disposable(tag)
+              headers={'apikey':K,'Content-Type':'application/json'}
+              r=requests.post(S+'/auth/v1/signup',params={'redirect_to':PUB},headers=headers,json={'email':addr,'password':PW,'data':{'display_name':name}},timeout=30)
+              if r.status_code>=300: raise RuntimeError(f'Signup failed {r.status_code}: {r.text[:300]}')
+              uid=r.json().get('user',{}).get('id') or r.json().get('id')
+              if not uid: raise RuntimeError('Signup did not return user id')
+              final=confirm_from_mail(addr,mtok)
+              tr=requests.post(S+'/auth/v1/token',params={'grant_type':'password'},headers=headers,json={'email':addr,'password':PW},timeout=30)
+              if tr.status_code>=300: raise RuntimeError(f'Password sign-in failed {tr.status_code}: {tr.text[:300]}')
+              tok=tr.json()['access_token']
+              ph={'apikey':K,'Authorization':'Bearer '+tok}
+              pr=requests.get(S+'/rest/v1/profiles',params={'id':'eq.'+uid,'select':'id,email,display_name,role,approved'},headers=ph,timeout=30)
+              if pr.status_code>=300: raise RuntimeError(f'Profile read failed {pr.status_code}: {pr.text[:300]}')
+              rows=pr.json()
+              if len(rows)!=1: raise RuntimeError('Expected exactly one auto-created profile')
+              p=rows[0]
+              if p.get('approved') is not False or p.get('role')!='pending': raise RuntimeError('New profile is not pending/unapproved: '+json.dumps(p))
+              return {'email':addr,'id':uid,'final_url':final,'profile':p}
+          a=signup('E2E Admin Bootstrap','admin')
+          b=signup('E2E Pending User','user')
+          print('E2E_STAGE1='+json.dumps({'password':PW,'admin':a,'user':b},separators=(',',':')))
+          print('STAGE1_PASS signup confirmation_redirect pending_profile signin')
+          PY
