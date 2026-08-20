@@ -1,0 +1,36 @@
+name: Temporary Speed Pathway Auth Probe
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/e2e-auth-probe.yml']
+jobs:
+  signup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create two temporary registrations through public auth API
+        shell: bash
+        run: |
+          set -euo pipefail
+          URL='https://rcisvivlhpdwwikoakmt.supabase.co'
+          KEY='sb_publishable_WF7qqXdDuSld2wu1PQYJbQ_3h5avNvz'
+          TS=$(date +%s)
+          ADMIN="speedpathway-admin-e2e-${TS}@example.invalid"
+          USER="speedpathway-user-e2e-${TS}@example.invalid"
+          PASS='E2e-Speed-Pathway-826!'
+          for pair in "$ADMIN|E2E Admin" "$USER|E2E User"; do
+            EMAIL=${pair%%|*}; NAME=${pair#*|}
+            CODE=$(curl -sS -o /tmp/out.json -w '%{http_code}' "$URL/auth/v1/signup" \
+              -H "apikey: $KEY" -H 'Content-Type: application/json' \
+              --data "{\"email\":\"$EMAIL\",\"password\":\"$PASS\",\"data\":{\"display_name\":\"$NAME\"}}")
+            echo "$NAME signup HTTP $CODE"
+            python - <<'PY'
+import json
+p=json.load(open('/tmp/out.json'))
+print('user_created=', bool(p.get('user')), 'session_returned=', bool(p.get('access_token')))
+if p.get('error_description') or p.get('msg'):
+    print('error=',p.get('error_description') or p.get('msg'))
+PY
+            test "$CODE" = "200"
+          done
+          echo "ADMIN_EMAIL=$ADMIN"
+          echo "USER_EMAIL=$USER"
