@@ -1,0 +1,109 @@
+name: Speed Pathway Auth E2E
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/auth-e2e.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Run end-to-end auth verification
+        env:
+          SUPA_URL: https://rcisvivlhpdwwikoakmt.supabase.co
+          SUPA_KEY: sb_publishable_WF7qqXdDuSld2wu1PQYJbQ_3h5avNvz
+          PUBLIC_SITE: https://taylorchell043-spec.github.io/speed-pathway/
+        run: |
+          python3 - <<'PY'
+          import requests, time, re, html, os, sys, json
+          SUPA=os.environ['SUPA_URL']; KEY=os.environ['SUPA_KEY']; SITE=os.environ['PUBLIC_SITE']
+          H={'apikey':KEY,'Content-Type':'application/json'}
+          s=requests.Session()
+          def fail(msg):
+              print('E2E_FAIL:',msg); sys.exit(1)
+          # temp mailbox
+          d=s.get('https://api.mail.tm/domains',timeout=20); d.raise_for_status()
+          domain=d.json()['hydra:member'][0]['domain']
+          stamp=str(int(time.time()))
+          mailpass='SpE2E-'+stamp+'!x9'
+          def mailbox(prefix):
+              addr=f'{prefix}-{stamp}@{domain}'
+              r=s.post('https://api.mail.tm/accounts',json={'address':addr,'password':mailpass},timeout=20)
+              if r.status_code not in (200,201): fail('mailbox create '+r.text)
+              t=s.post('https://api.mail.tm/token',json={'address':addr,'password':mailpass},timeout=20); t.raise_for_status()
+              return addr,t.json()['token']
+          admin_email,admin_mail_token=mailbox('speedpathway-e2e-admin')
+          pending_email,pending_mail_token=mailbox('speedpathway-e2e-pending')
+          admin_pw='AdminE2E-'+stamp+'!A1'
+          pending_pw='PendingE2E-'+stamp+'!P1'
+          def signup(email,pw,name):
+              r=s.post(SUPA+'/auth/v1/signup',params={'redirect_to':SITE},headers=H,json={'email':email,'password':pw,'data':{'display_name':name}},timeout=30)
+              if r.status_code!=200: fail('signup failed '+email+' '+r.text)
+              print('SIGNUP_OK',email)
+          signup(admin_email,admin_pw,'Speed Pathway E2E Admin Hold')
+          signup(pending_email,pending_pw,'Speed Pathway E2E Pending Hold')
+          def confirm(email,mtoken):
+              mh={'Authorization':'Bearer '+mtoken}
+              msg=None
+              for _ in range(60):
+                  r=s.get('https://api.mail.tm/messages',headers=mh,timeout=20); r.raise_for_status()
+                  arr=r.json().get('hydra:member',[])
+                  if arr:
+                      msg=arr[0]; break
+                  time.sleep(2)
+              if not msg: fail('confirmation email not received for '+email)
+              r=s.get('https://api.mail.tm/messages/'+msg['id'],headers=mh,timeout=20); r.raise_for_status()
+              body=html.unescape((r.json().get('html') or [''])[0] if isinstance(r.json().get('html'),list) else (r.json().get('html') or r.json().get('text') or ''))
+              links=re.findall(r'https://[^\"\'<> ]+',body)
+              link=next((x for x in links if '/auth/v1/verify' in x),None)
+              if not link: fail('confirmation link missing for '+email)
+              vr=s.get(link,allow_redirects=False,timeout=30)
+              loc=vr.headers.get('Location','')
+              if not loc.startswith(SITE): fail('bad confirmation redirect '+repr(loc))
+              if 'localhost' in loc.lower() or 'error' in loc.lower(): fail('confirmation redirected to localhost/error '+loc)
+              page=s.get(loc.split('#')[0],timeout=30)
+              if page.status_code!=200 or 'Speed Pathway' not in page.text: fail('public site did not load after confirmation')
+              print('CONFIRM_REDIRECT_OK',email,loc.split('#')[0])
+          confirm(admin_email,admin_mail_token)
+          confirm(pending_email,pending_mail_token)
+          def login(email,pw):
+              r=s.post(SUPA+'/auth/v1/token',params={'grant_type':'password'},headers=H,json={'email':email,'password':pw},timeout=30)
+              if r.status_code!=200: fail('login failed '+email+' '+r.text)
+              return r.json()['access_token'],r.json()['user']['id']
+          admin_jwt,admin_id=login(admin_email,admin_pw)
+          pending_jwt,pending_id=login(pending_email,pending_pw)
+          print('LOGIN_PREAPPROVAL_OK',admin_email,pending_email)
+          # Wait for automation to promote admin candidate in DB.
+          ah={'apikey':KEY,'Authorization':'Bearer '+admin_jwt}
+          promoted=False
+          for _ in range(100):
+              r=s.get(SUPA+'/rest/v1/profiles',params={'select':'id,email,role,approved','id':'eq.'+admin_id},headers=ah,timeout=20)
+              if r.status_code==200 and r.json() and r.json()[0].get('role') in ('admin','super_admin') and r.json()[0].get('approved') is True:
+                  promoted=True; break
+              time.sleep(3)
+          if not promoted: fail('admin candidate was not promoted in time')
+          print('ADMIN_PROMOTION_SEEN')
+          # Program Admin equivalent read: admin must be able to see pending registration.
+          r=s.get(SUPA+'/rest/v1/profiles',params={'select':'id,email,display_name,role,approved,created_at','order':'created_at.desc'},headers=ah,timeout=30)
+          if r.status_code!=200: fail('admin profile list failed '+r.text)
+          rows=r.json(); target=next((x for x in rows if x.get('id')==pending_id),None)
+          if not target: fail('pending registration not visible to admin')
+          if target.get('approved') is not False or target.get('role')!='pending': fail('pending registration wrong initial state '+json.dumps(target))
+          print('PENDING_VISIBLE_IN_ADMIN_OK')
+          # Program Admin equivalent approve + assign role.
+          ph={**ah,'Content-Type':'application/json','Prefer':'return=representation'}
+          r=s.patch(SUPA+'/rest/v1/profiles',params={'id':'eq.'+pending_id},headers=ph,json={'role':'coach','approved':True},timeout=30)
+          if r.status_code not in (200,204): fail('admin approval update failed '+r.text)
+          print('ADMIN_APPROVE_ROLE_OK')
+          # Approved user can sign in and sees approved role.
+          final_jwt,_=login(pending_email,pending_pw)
+          fh={'apikey':KEY,'Authorization':'Bearer '+final_jwt}
+          r=s.get(SUPA+'/rest/v1/profiles',params={'select':'email,role,approved','id':'eq.'+pending_id},headers=fh,timeout=30)
+          if r.status_code!=200 or not r.json(): fail('approved user profile read failed '+r.text)
+          row=r.json()[0]
+          if row.get('approved') is not True or row.get('role')!='coach': fail('approved state not persisted '+json.dumps(row))
+          print('APPROVED_USER_SIGNIN_OK')
+          print('E2E_PASS')
+          PY
