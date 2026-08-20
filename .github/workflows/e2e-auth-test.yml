@@ -1,5 +1,4 @@
 name: Speed Pathway Auth E2E Test
-# verification-run-20260819
 on:
   push:
     paths:
@@ -7,53 +6,90 @@ on:
 permissions:
   contents: read
 jobs:
-  phase-a:
+  verify-account-workflow:
     runs-on: ubuntu-latest
     steps:
-      - name: Create, confirm, and sign in a fresh admin-candidate account
+      - name: Verify public signup, confirmation, Program Admin approval, role assignment, and approved sign-in
         env:
           SUPA_URL: https://rcisvivlhpdwwikoakmt.supabase.co
           SUPA_KEY: sb_publishable_WF7qqXdDuSld2wu1PQYJbQ_3h5avNvz
-          REDIRECT: https://taylorchell043-spec.github.io/speed-pathway/
+          PUBLIC_URL: https://taylorchell043-spec.github.io/speed-pathway/
           TEST_PASSWORD: SpdE2E-2026-Verify!
+          ADMIN_EMAIL: speedpathway-admin-32266637478@emalupe.com
         run: |
           python3 - <<'PY'
-          import os,time,re,html,requests
-          S=os.environ['SUPA_URL']; K=os.environ['SUPA_KEY']; R=os.environ['REDIRECT']; P=os.environ['TEST_PASSWORD']
+          import os,time,re,html,requests,json
+          S=os.environ['SUPA_URL']; K=os.environ['SUPA_KEY']; PUB=os.environ['PUBLIC_URL']; PW=os.environ['TEST_PASSWORD']; ADMIN=os.environ['ADMIN_EMAIL']
           H={'apikey':K,'Authorization':'Bearer '+K,'Content-Type':'application/json'}
           run=os.environ['GITHUB_RUN_ID']
+
+          # Public site and deployed Program Admin module must both be live.
+          page=requests.get(PUB,timeout=30); page.raise_for_status()
+          assert 'Speed Pathway' in page.text
+          assert 'Program Admin' in page.text
+          assert 'admin-accounts.js' in page.text, 'deployed page is missing admin-accounts.js'
+          mod=requests.get(PUB+'admin-accounts.js',timeout=30); mod.raise_for_status()
+          for expected in ['Account Approvals','Approve registrations and assign access roles','admin','coach','athlete','parent','college_coach']:
+              assert expected in mod.text, 'admin module missing '+expected
+          print('PUBLIC_ADMIN_UI_OK=true')
+
+          # Create a truly fresh mailbox and account through the same public Supabase signup path.
           domain=requests.get('https://api.mail.tm/domains',timeout=20).json()['hydra:member'][0]['domain']
-          email=f'speedpathway-admin-{run}@{domain}'
-          a=requests.post('https://api.mail.tm/accounts',json={'address':email,'password':P},timeout=20); a.raise_for_status()
-          tok=requests.post('https://api.mail.tm/token',json={'address':email,'password':P},timeout=20).json()['token']
-          mh={'Authorization':'Bearer '+tok}
-          sr=requests.post(S+'/auth/v1/signup',params={'redirect_to':R},headers=H,json={'email':email,'password':P,'data':{'display_name':'Speed Pathway E2E Admin Candidate','e2e_run':run}},timeout=25)
-          print('signup_http='+str(sr.status_code)); print('signup_body='+sr.text[:300]); sr.raise_for_status(); uid=sr.json()['id']
+          email=f'speedpathway-e2e-{run}@{domain}'
+          a=requests.post('https://api.mail.tm/accounts',json={'address':email,'password':PW},timeout=20); a.raise_for_status()
+          mtok=requests.post('https://api.mail.tm/token',json={'address':email,'password':PW},timeout=20).json()['token']
+          mh={'Authorization':'Bearer '+mtok}
+          sr=requests.post(S+'/auth/v1/signup',params={'redirect_to':PUB},headers=H,json={'email':email,'password':PW,'data':{'display_name':'Speed Pathway E2E Pending User','e2e_run':run}},timeout=30)
+          print('signup_http='+str(sr.status_code)); sr.raise_for_status(); uid=sr.json()['id']
+          print('FRESH_USER_EMAIL='+email); print('FRESH_USER_ID='+uid)
+
+          # Read the real confirmation email and follow its real verification URL.
           link=None
-          for _ in range(45):
+          for _ in range(60):
               msgs=requests.get('https://api.mail.tm/messages',headers=mh,timeout=15).json().get('hydra:member',[])
               if msgs:
                   m=requests.get('https://api.mail.tm/messages/'+msgs[0]['id'],headers=mh,timeout=15).json()
                   h=m.get('html') or ''; h=h[0] if isinstance(h,list) and h else h
                   blob=html.unescape((h or '')+' '+(m.get('text') or ''))
                   for u in re.findall(r'https?://[^\s"<>]+',blob):
-                      if '/auth/v1/verify' in u: link=u.replace('&amp;','&'); break
+                      if '/auth/v1/verify' in u:
+                          link=u.replace('&amp;','&'); break
               if link: break
               time.sleep(2)
-          assert link, 'confirmation link not found'
-          first=requests.get(link,allow_redirects=False,timeout=30)
-          print('verify_http='+str(first.status_code)); print('verify_location='+str(first.headers.get('location')))
+          assert link, 'confirmation email/link not received'
           final=requests.get(link,allow_redirects=True,timeout=30)
-          print('confirm_final='+final.url); print('confirm_final_http='+str(final.status_code))
-          assert final.url.startswith(R), 'confirmation redirected somewhere else: '+final.url
+          print('confirmation_final_url='+final.url); print('confirmation_http='+str(final.status_code))
+          assert final.url.startswith(PUB), 'confirmation did not return to public Speed Pathway site'
+          assert 'localhost' not in final.url.lower()
           assert final.status_code==200
-          lr=requests.post(S+'/auth/v1/token?grant_type=password',headers=H,json={'email':email,'password':P},timeout=25)
-          print('login_http='+str(lr.status_code)); lr.raise_for_status(); token=lr.json()['access_token']
-          uh={'apikey':K,'Authorization':'Bearer '+token}
-          pr=requests.get(S+'/rest/v1/profiles',headers=uh,params={'id':'eq.'+uid,'select':'id,email,role,approved,display_name'},timeout=20)
-          print('profile_http='+str(pr.status_code)); print('profile='+pr.text); pr.raise_for_status()
-          rows=pr.json(); assert rows and rows[0]['role']=='pending' and rows[0]['approved'] is False
-          print('ADMIN_CANDIDATE_ID='+uid)
-          print('ADMIN_CANDIDATE_EMAIL='+email)
-          print('PHASE_A_OK=true')
+          print('CONFIRMATION_REDIRECT_OK=true')
+
+          # Fresh confirmed account must sign in and remain pending/unapproved.
+          lr=requests.post(S+'/auth/v1/token?grant_type=password',headers=H,json={'email':email,'password':PW},timeout=30); lr.raise_for_status()
+          utok=lr.json()['access_token']; UH={'apikey':K,'Authorization':'Bearer '+utok,'Content-Type':'application/json'}
+          pr=requests.get(S+'/rest/v1/profiles',headers=UH,params={'id':'eq.'+uid,'select':'id,email,display_name,role,approved'},timeout=20); pr.raise_for_status()
+          rows=pr.json(); assert len(rows)==1 and rows[0]['role']=='pending' and rows[0]['approved'] is False, rows
+          print('PENDING_PROFILE_OK=true')
+
+          # Sign in as a real approved admin using the same browser/API credentials the app uses.
+          ar=requests.post(S+'/auth/v1/token?grant_type=password',headers=H,json={'email':ADMIN,'password':PW},timeout=30)
+          print('admin_login_http='+str(ar.status_code)); ar.raise_for_status(); atok=ar.json()['access_token']
+          AH={'apikey':K,'Authorization':'Bearer '+atok,'Content-Type':'application/json'}
+          ap=requests.get(S+'/rest/v1/profiles',headers=AH,params={'email':'eq.'+email,'select':'id,email,display_name,role,approved'},timeout=20); ap.raise_for_status()
+          visible=ap.json(); assert len(visible)==1 and visible[0]['id']==uid and visible[0]['approved'] is False
+          print('PROGRAM_ADMIN_PENDING_VISIBLE_OK=true')
+
+          # Perform the exact UPDATE used by Program Admin: choose a role and approve.
+          up=requests.patch(S+'/rest/v1/profiles',headers={**AH,'Prefer':'return=representation'},params={'id':'eq.'+uid},json={'role':'coach','approved':True},timeout=20)
+          print('admin_update_http='+str(up.status_code)); print('admin_update_body='+up.text[:500]); up.raise_for_status()
+          changed=up.json(); assert len(changed)==1 and changed[0]['role']=='coach' and changed[0]['approved'] is True
+          print('ADMIN_APPROVE_ROLE_OK=true')
+
+          # Approved user signs in again and now receives approved coach access state.
+          lr2=requests.post(S+'/auth/v1/token?grant_type=password',headers=H,json={'email':email,'password':PW},timeout=30); lr2.raise_for_status()
+          tok2=lr2.json()['access_token']; U2={'apikey':K,'Authorization':'Bearer '+tok2}
+          p2=requests.get(S+'/rest/v1/profiles',headers=U2,params={'id':'eq.'+uid,'select':'email,role,approved'},timeout=20); p2.raise_for_status()
+          out=p2.json(); assert len(out)==1 and out[0]['approved'] is True and out[0]['role']=='coach', out
+          print('APPROVED_SIGNIN_OK=true')
+          print('E2E_ACCOUNT_WORKFLOW_PASS=true')
           PY
