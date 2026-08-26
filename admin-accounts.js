@@ -1,4 +1,5 @@
 (()=>{
+const prod=document.createElement('script');prod.src='production-shell.js?v=20260826-prod1';prod.defer=true;document.head.appendChild(prod);
 const ROLES=['admin','coach','athlete','parent','college_coach'];
 const DB=supabase.createClient('https://rcisvivlhpdwwikoakmt.supabase.co','sb_publishable_WF7qqXdDuSld2wu1PQYJbQ_3h5avNvz');
 async function getCtx(){try{const {data:{session}}=await DB.auth.getSession();if(!session)return null;const {data:p}=await DB.from('profiles').select('role,approved').eq('id',session.user.id).single();return {sb:DB,session,p}}catch(e){return null}}
