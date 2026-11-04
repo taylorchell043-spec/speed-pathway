@@ -76,7 +76,17 @@ async function staffOverview(){
  rows.sort((a,b)=>Number(b.attention)-Number(a.attention)||b.overdue-a.overdue);
  target.innerHTML='<div class="ra-muted">'+rows.length+' athlete accounts · Attention means overdue reminders, no saved schools, or no logged outreach. Outreach may not yet be appropriate for younger athletes.</div>'+rows.slice(0,150).map(a=>'<div class="ra-item"><b>'+esc(a.display_name||a.email||'Athlete')+'</b> '+(a.attention?'⚑ Review':'✓')+'<div class="ra-muted">Grad '+esc(a.grad||'not set')+' · '+a.schools+' schools · '+a.outreach+' contacts · '+a.overdue+' overdue · '+a.completed+' completed steps</div></div>').join('');
 }
-async function reload(){if(await context())render()}
+async function autoPlan(){
+ if(!path.grad_year)return;
+ const g=grade(),year=new Date().getFullYear(),suggested=dueItems(g).slice(0,3);
+ const existing=new Set(activities.filter(a=>a.activity_type==='recruiting_reminder'&&a.metadata?.auto_plan_year===year&&a.metadata?.auto_grade===g).map(a=>a.metadata?.auto_id));
+ const missing=suggested.filter(t=>!existing.has(t.id));
+ if(!missing.length)return;
+ const payload=missing.map(t=>({user_id:user.id,activity_type:'recruiting_reminder',title:t.title,due_date:days(t.offset),metadata:{auto_plan_year:year,auto_grade:g,auto_id:t.id,planning_suggestion:true}}));
+ const {error}=await client.from('pathway_activity').insert(payload);
+ if(!error){const {data}=await client.from('pathway_activity').select('id,activity_type,title,due_date,completed_at,metadata,created_at').eq('user_id',user.id).order('created_at',{ascending:false}).limit(250);activities=data||[]}
+}
+async function reload(){if(await context()){await autoPlan();render()}}
 let started=false;
 function init(){if(started)return;started=true;setInterval(()=>{if($('pathway')&&!$('recruitingAdvisor'))reload().catch(()=>{})},2200);document.addEventListener('click',e=>{if(e.target.closest('[data-page="pathway"]'))setTimeout(()=>reload().catch(()=>{}),350)});getDB()?.auth.onAuthStateChange(()=>setTimeout(()=>reload().catch(()=>{}),700));setTimeout(()=>reload().catch(()=>{}),1200)}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
