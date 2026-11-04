@@ -24,22 +24,10 @@ jobs:
           rm -rf _site
           mkdir _site
           cp index.html _site/index.html
-          cp pathway-upgrade.js pathway-upgrade.css recruiting-playbook.js admin-accounts.js _site/
-          python3 - <<'PY'
-          from pathlib import Path
-          p=Path('_site/index.html')
-          s=p.read_text(encoding='utf-8')
-          cache='<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0">'
-          css='<link rel="stylesheet" href="pathway-upgrade.css?v=25">'
-          scripts=['<script src="pathway-upgrade.js?v=25"></script>','<script src="recruiting-playbook.js?v=25"></script>','<script src="admin-accounts.js?v=25"></script>']
-          if cache not in s:
-              s=s.replace('</head>',cache+'\n'+css+'\n</head>')
-          else:
-              if css not in s:s=s.replace('</head>',css+'\n</head>')
-          for js in scripts:
-              if js not in s:s=s.replace('</body>',js+'\n</body>')
-          p.write_text(s,encoding='utf-8')
-          PY
+          # Ship every local runtime asset referenced by the app.
+          find . -maxdepth 1 -type f \( -name '*.js' -o -name '*.css' -o -name '*.json' -o -name '*.svg' -o -name '*.png' -o -name '*.webp' -o -name '*.jpg' \) -exec cp {} _site/ \;
+          # index.html already declares versioned scripts and styles.
+          # Do not inject duplicate scripts or stale ?v=25 assets.
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
