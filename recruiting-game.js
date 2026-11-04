@@ -25,7 +25,7 @@ decision:'Apply the no-softball test: Would you still want this school if you co
 const emailTemplate=(name,grad)=>'Subject: '+grad+' Softball Prospect | [Your Name] | [Position]\\n\\nCoach [Last Name],\\n\\nMy name is [Your Name], a '+grad+' [position] with Midwest Speed. I am interested in '+name+' because [specific academic and softball reasons].\\n\\nMy GPA is [GPA], my academic interests include [major], and my verified metrics include [metrics]. My skills video is [link], and my upcoming schedule is [schedule].\\n\\nI would appreciate the opportunity to learn more about your program and its recruiting needs for my class.\\n\\nThank you,\\n[Your Name]\\n[Phone or contact]';
 let activeGrade=null,ctx=null,completed=[],reminders=[],schools=[];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
-const db=()=>window.speedSb||window.sb;
+const db=()=>{try{return typeof speedSb!=='undefined'?speedSb:(window.speedSb||window.sb)}catch(e){return window.speedSb||window.sb}};
 async function refresh(){
  const el=document.getElementById('roadmapGrade'),page=document.getElementById('pathway');if(!el||!page)return;
  const client=db();if(!client)return;
