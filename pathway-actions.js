@@ -1,6 +1,6 @@
 (()=>{
 'use strict';
-const client=()=>window.speedSb||(typeof supabase!=='undefined'?supabase.createClient('https://rcisvivlhpdwwikoakmt.supabase.co','sb_publishable_WF7qqXdDuSld2wu1PQYJbQ_3h5avNvz'):null);
+const client=()=>((typeof speedSb!=='undefined')?speedSb:window.speedSb)||(typeof supabase!=='undefined'?supabase.createClient('https://rcisvivlhpdwwikoakmt.supabase.co','sb_publishable_WF7qqXdDuSld2wu1PQYJbQ_3h5avNvz'):null);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const steps={
 8:['Explore different types of colleges','Keep grades and attendance strong','Establish baseline softball testing','Try different softball positions','Start a simple activities and accomplishments log'],
