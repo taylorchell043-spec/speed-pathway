@@ -1,0 +1,72 @@
+(()=>{
+'use strict';
+const missions={
+8:[['Discover your future','Explore careers, majors and what matters to you in a college.','research'],['Build strong habits','Meet with your counselor and plan courses and study habits.','academics'],['Record your baseline','Ask your coach for verified running, throwing and hitting measurements.','testing'],['Explore college softball','Compare NCAA divisions, NAIA and two-year colleges.','research']],
+9:[['Own your recruiting journey','Athlete leads; family and coaches support. Start an accomplishments log.','profile'],['Build your player profile','Add positions, graduation year, GPA, schedule and verified metrics.','profile'],['Make your first college list','Research academics, softball, location and affordability, not just logos.','schools'],['Create your skills video','Plan a clear 3–5 minute skills video with useful angles and current footage.','video'],['Understand recruiting rules','Review current division-specific communication rules with your coach.','rules']],
+10:[['Choose your direction','List possible majors and careers, then define your non-negotiables.','research'],['Build a balanced school list','Research 15–25 schools, including realistic athletic and academic options.','schools'],['Make your recruiting profile','Check GPA, positions, grad year, schedule, verified metrics and video link.','profile'],['Write your coach introduction','Draft a short, personalized email for each school.','email'],['Build a targeted camp plan','Evaluate each camp before spending money on registration and travel.','camp'],['Follow up and update coaches','Track responses and send meaningful schedule or video updates.','followup'],['Review NCAA eligibility','Check courses, requirements and current contact rules with a counselor.','rules']],
+11:[['Refresh your target list','Review academic fit, roster needs, cost and mutual interest.','schools'],['Update video and testing','Share current footage, schedule, GPA and verified performance.','video'],['Send personalized coach updates','Explain your interest, your fit and your upcoming opportunities.','email'],['Evaluate camps and visits','Choose events based on evidence of coach interest and your budget.','camp'],['Prepare for coach conversations','Ask about position needs, roster opportunity and academic support.','questions'],['Compare real college costs','Discuss financial aid, net price and scholarship expectations.','finance'],['Log every follow-up','Record conversations, deadlines and your next action.','followup']],
+12:[['Confirm your shortlist','Prioritize mutual interest, academic programs, finances and fit.','schools'],['Complete applications','Track admission, eligibility and financial aid deadlines.','academics'],['Ask the hard questions','Discuss roster role, development, costs and the no-softball fit test.','questions'],['Compare your options','Evaluate school, people, degree, cost and softball separately.','finance'],['Make your decision','Discuss with your family and mentors, then communicate professionally.','decision'],['Close the loop','Thank coaches and update everyone who supported your process.','email']]
+};
+const help={
+research:'Explore careers and majors first. A school must fit your life and education, even if softball ends. Confirm the major exists in the official academic catalog.',
+academics:'Talk to your school counselor. Record course, application and aid deadlines. Do not rely on a generic checklist for eligibility decisions.',
+testing:'Use verified measurements, not estimates. Update your profile as you develop; metrics inform fit but never guarantee a roster spot.',
+profile:'Include graduation year, positions, high school and club team, GPA if appropriate, schedule, contact information, verified metrics and a working video link.',
+schools:'Research academics, location, cost, campus setting, roster needs and athletic level. Save reach, target and foundation options.',
+video:'Aim for roughly 3–5 minutes of clear, recent skills footage. Identify the athlete, show useful angles, and make video easy for a coach to access.',
+rules:'NCAA and other associations have division-specific, changing communication and eligibility rules. Confirm the current rules through official sources before contacting coaches.',
+email:'Keep it short, specific and athlete-written. Say why that program interests you. Include grad year, positions, academic interest, schedule, verified metrics and video.',
+followup:'Follow up with a meaningful update or a clear question, not repeated generic messages. Record dates and responses; respect coach communication rules.',
+camp:'Before registering, ask: Is this school on my target list? Have I contacted the coach with video and schedule? Is the program recruiting my position and class? Is my goal instruction or evaluation? Is the travel cost justified? There is no universal number of camps to attend.',
+questions:'Ask about roster needs for your position and graduation year, player development, academic support, team culture, communication expectations and costs.',
+finance:'Compare actual estimated net cost, aid eligibility, academic fit and family budget. Softball aid may be partial; verify offers in writing.',
+decision:'Apply the no-softball test: Would you still want this school if you could not play? Weigh academics, finances, location, culture and opportunity.'
+};
+const emailTemplate=(name,grad)=>'Subject: '+grad+' Softball Prospect | [Your Name] | [Position]\\n\\nCoach [Last Name],\\n\\nMy name is [Your Name], a '+grad+' [position] with Midwest Speed. I am interested in '+name+' because [specific academic and softball reasons].\\n\\nMy GPA is [GPA], my academic interests include [major], and my verified metrics include [metrics]. My skills video is [link], and my upcoming schedule is [schedule].\\n\\nI would appreciate the opportunity to learn more about your program and its recruiting needs for my class.\\n\\nThank you,\\n[Your Name]\\n[Phone or contact]';
+let activeGrade=null,ctx=null,completed=[],reminders=[],schools=[];
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
+const db=()=>window.speedSb||window.sb;
+async function refresh(){
+ const el=document.getElementById('roadmapGrade'),page=document.getElementById('pathway');if(!el||!page)return;
+ const client=db();if(!client)return;
+ const {data:{session}}=await client.auth.getSession();if(!session)return;
+ const [path,activity,list]=await Promise.all([
+ client.from('athlete_pathways').select('grad_year,completed_tasks').eq('user_id',session.user.id).maybeSingle(),
+ client.from('pathway_activity').select('id,title,due_date,completed_at,metadata').eq('user_id',session.user.id).eq('activity_type','recruiting_reminder').order('due_date',{ascending:true}).limit(100),
+ client.from('pathway_school_lists').select('school_name').eq('user_id',session.user.id).limit(200)
+ ]);
+ ctx={client,user:session.user,gradYear:path.data?.grad_year||new Date().getFullYear()+2};
+ completed=Array.isArray(path.data?.completed_tasks)?path.data.completed_tasks:[];
+ reminders=activity.data||[];schools=list.data||[];
+ activeGrade=Number(el.value)||10;paint();
+}
+function paint(){
+ const el=document.getElementById('roadmapGrade');if(!el||!ctx)return;
+ const parent=el.closest('.card');if(!parent)return;
+ let stage=document.getElementById('recruitingGame');if(!stage){stage=document.createElement('div');stage.id='recruitingGame';parent.appendChild(stage)}
+ const items=missions[activeGrade]||missions[10],count=items.filter((_,i)=>completed.includes(activeGrade+':'+i)).length;
+ parent.querySelectorAll('[data-step]').forEach(n=>{const row=n.closest('label');if(row)row.style.display='none'});
+ stage.innerHTML='<style>.sp-mission{max-width:88%;margin:11px 0;border-radius:18px;padding:14px;border:1px solid #415148;background:#14221a;cursor:pointer;text-align:left;color:inherit;width:88%}.sp-mission:nth-child(even){margin-left:12%}.sp-mission.done{background:#143b24;border-color:#3da665}.sp-mission.current{border:2px solid #65df8c}.sp-mission .stepnum{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:#33483b;margin-right:9px}.sp-mission.done .stepnum{background:#238e4d}.sp-game-panel{border:1px solid #3e8c5b;border-radius:14px;padding:16px;margin:16px 0}.sp-game-panel textarea,.sp-game-panel input,.sp-game-panel select{box-sizing:border-box;width:100%;padding:9px;margin:6px 0}.sp-game-panel button{margin:6px 5px 6px 0}.sp-progress{height:10px;border-radius:12px;background:#304237;overflow:hidden}.sp-progress div{height:100%;background:#37c76e}</style>'+
+ '<h3 style="margin:18px 0 5px">Road to College · Grade '+activeGrade+'</h3><div class="muted">Complete each mission to unlock the next step. Select any mission to review the guidance.</div>'+
+ '<div style="margin:12px 0 5px">'+count+' / '+items.length+' missions completed</div><div class="sp-progress"><div style="width:'+Math.round(count/items.length*100)+'%"></div></div>'+
+ items.map((m,i)=>{const done=completed.includes(activeGrade+':'+i),next=items.findIndex((_,j)=>!completed.includes(activeGrade+':'+j));return '<button type="button" class="sp-mission '+(done?'done':i===next?'current':'')+'" data-game-step="'+i+'"><span class="stepnum">'+(done?'✓':i+1)+'</span><strong>'+esc(m[0])+'</strong><div class="muted" style="font-size:12px;margin:5px 0 0 41px">'+(done?'Completed':i===next?'NEXT MISSION':'Preview mission')+'</div></button>'}).join('')+
+ '<div id="gameDetail"></div><div class="sp-game-panel"><h4>Upcoming reminders</h4>'+reminders.filter(r=>!r.completed_at).map(r=>'<div style="padding:7px 0;border-bottom:1px solid #35453b"><b>'+esc(r.due_date)+'</b> · '+esc(r.title)+'</div>').join('')+'<div class="muted">Reminders are saved in your account. Automatic email, SMS and push delivery are not enabled yet.</div></div>';
+ stage.querySelectorAll('[data-game-step]').forEach(b=>b.onclick=()=>openMission(Number(b.dataset.gameStep)));
+}
+function openMission(i){
+ const m=missions[activeGrade][i],key=activeGrade+':'+i,done=completed.includes(key),first=missions[activeGrade].findIndex((_,j)=>!completed.includes(activeGrade+':'+j)),box=document.getElementById('gameDetail');if(!box)return;
+ const upcoming=reminders.find(r=>r.metadata?.grade===activeGrade&&r.metadata?.mission===i&&!r.completed_at);
+ box.innerHTML='<div class="sp-game-panel"><h3>Mission '+(i+1)+': '+esc(m[0])+'</h3><p>'+esc(help[m[2]]||'Work through this step with your Midwest Speed coach and family.')+'</p>'+
+ (m[2]==='camp'?'<p><b>Camp decision:</b> Only spend money when the event has a clear purpose. Track target school, coach interest, cost, date and follow-up.</p>':'')+
+ (m[2]==='email'||m[2]==='followup'?'<label>Choose a school</label><select id="gameSchool"><option value="">Select a school</option>'+schools.map(s=>'<option>'+esc(s.school_name)+'</option>').join('')+'</select><button type="button" id="gameDraft">Write coach email draft</button><textarea id="gameEmail" rows="11" style="display:none"></textarea><button type="button" id="gameCopy" style="display:none">Copy email</button>':'')+
+ '<label>Target date</label><input id="gameDate" type="date" value="'+esc(upcoming?.due_date||'')+'"><button type="button" id="gameReminder">Save in-app reminder</button><div id="gameMessage" class="muted"></div>'+
+ '<button type="button" class="action" id="gameComplete">'+(done?'Mark incomplete':i===first?'✓ Complete and unlock next mission':'✓ Mark complete')+'</button></div>';
+ document.getElementById('gameComplete').onclick=async()=>{const next=done?completed.filter(x=>x!==key):[...new Set([...completed,key])];const {error}=await ctx.client.from('athlete_pathways').upsert({user_id:ctx.user.id,completed_tasks:next,updated_at:new Date().toISOString()},{onConflict:'user_id'});if(error){document.getElementById('gameMessage').textContent='Could not save: '+error.message;return}completed=next;paint();const n=missions[activeGrade].findIndex((_,j)=>!completed.includes(activeGrade+':'+j));if(n>=0)openMission(n)};
+ document.getElementById('gameReminder').onclick=async()=>{const date=document.getElementById('gameDate').value,msg=document.getElementById('gameMessage');if(!date){msg.textContent='Choose a date.';return}const {error}=await ctx.client.from('pathway_activity').insert({user_id:ctx.user.id,activity_type:'recruiting_reminder',title:m[0],due_date:date,metadata:{grade:activeGrade,mission:i}});msg.textContent=error?'Could not save: '+error.message:'In-app reminder saved. External notifications are not enabled.';if(!error){const {data}=await ctx.client.from('pathway_activity').select('id,title,due_date,completed_at,metadata').eq('user_id',ctx.user.id).eq('activity_type','recruiting_reminder').order('due_date',{ascending:true});reminders=data||[]}};
+ const draft=document.getElementById('gameDraft');if(draft)draft.onclick=()=>{const name=document.getElementById('gameSchool').value||'[College Name]',txt=document.getElementById('gameEmail');txt.value=emailTemplate(name,ctx.gradYear).replaceAll('\\n','\n');txt.style.display='block';document.getElementById('gameCopy').style.display='inline-block'};
+ const copy=document.getElementById('gameCopy');if(copy)copy.onclick=async()=>{const txt=document.getElementById('gameEmail');try{await navigator.clipboard.writeText(txt.value);document.getElementById('gameMessage').textContent='Email draft copied. Review and personalize before sending.'}catch(e){txt.select();document.getElementById('gameMessage').textContent='Select and copy the email draft above.'}};
+ box.scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+let timer=null;function start(){if(timer)return;timer=setInterval(()=>{const grade=document.getElementById('roadmapGrade');if(!grade||!document.getElementById('pathway'))return;if(!document.getElementById('recruitingGame'))refresh().catch(()=>{});},1800);document.addEventListener('change',e=>{if(e.target?.id==='roadmapGrade')setTimeout(()=>{document.getElementById('recruitingGame')?.remove();refresh()},100)});document.addEventListener('click',e=>{if(e.target.closest('[data-page="pathway"]'))setTimeout(refresh,300)});const c=db();c?.auth.onAuthStateChange(()=>setTimeout(refresh,700))}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
+})();
