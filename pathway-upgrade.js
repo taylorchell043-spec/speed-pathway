@@ -60,7 +60,7 @@ const sizeOptions=[['Small','Small'],['Medium','Medium'],['Large','Large']];
 function makePreferenceCheckboxes(id,items,heading,searchable){
  const field=el(id);if(!field||field.dataset.checkboxReady)return;
  const container=document.createElement('div');container.className='speedPreferenceBox';
- const selected=()=>String(field.value||'').split(',').map(x=>x.trim().toLowerCase()).filter(Boolean);
+ const selected=()=>String(el(id)?.value||'').split(',').map(x=>x.trim().toLowerCase()).filter(Boolean);
  container.innerHTML='<details style="border:1px solid #56745e;border-radius:11px;padding:12px;background:#14261a"><summary style="cursor:pointer;font-weight:700;list-style:auto">'+heading+' <span class="speedCount" style="font-weight:400"></span></summary>'+(searchable?'<input type="search" class="speedSearch" placeholder="Type to find a state, then check it" style="width:100%;margin:12px 0 8px;padding:10px;background:#0b1a10;color:white;border:1px solid #52705b;border-radius:8px">':'')+'<div class="speedOptions" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:7px;max-height:260px;overflow:auto;margin-top:12px">'+items.map(([v,n])=>'<label style="display:flex;align-items:center;gap:8px;border:1px solid #496550;border-radius:8px;padding:9px;cursor:pointer"><input type="checkbox" value="'+v+'" style="width:18px;height:18px;accent-color:#40b56b"><span>'+n+'</span></label>').join('')+'</div></details>';
  const prior=field.value;
  if(field.tagName==='SELECT'){const hidden=document.createElement('input');hidden.type='hidden';hidden.id=id;hidden.value=prior;field.replaceWith(hidden)}else field.type='hidden';
